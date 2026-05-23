@@ -12,12 +12,14 @@ namespace RegistrAi.Api.Controllers
     {
         private readonly AppDbContext _context;
         private readonly string _apiKey;
+        private readonly HttpClient _httpClient;
 
-        public TransacoesIaController(AppDbContext context, IConfiguration configuration)
+        public TransacoesIaController(AppDbContext context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
         {
             _context = context;
             // Agora puxamos a chave do Gemini
             _apiKey = configuration["Gemini:ApiKey"]!; 
+            _httpClient = httpClientFactory.CreateClient();
         }
 
         public class RequisicaoTexto
@@ -55,13 +57,13 @@ namespace RegistrAi.Api.Controllers
             var conteudo = new StringContent(jsonEnvio, Encoding.UTF8, "application/json");
 
             // 3. Pegamos o "telefone" (HttpClient) e ligamos para a URL oficial do Gemini 1.5 Flash
-            using var clienteHttp = new HttpClient();
+
             string urlGoogle = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
 
             try
             {
                 // Fazemos a chamada POST para o Google
-                var respostaGoogle = await clienteHttp.PostAsync(urlGoogle, conteudo);
+                var respostaGoogle = await _httpClient.PostAsync(urlGoogle, conteudo);
                 
                 if (!respostaGoogle.IsSuccessStatusCode)
                     {
@@ -88,6 +90,13 @@ namespace RegistrAi.Api.Controllers
                 var transacao = JsonSerializer.Deserialize<Transacao>(textoIa, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (transacao == null) return BadRequest("A IA não conseguiu entender a transação.");
+
+                var tipoNormalizado = transacao.Tipo?.Trim().ToLower();
+
+                if (tipoNormalizado != "receita" && tipoNormalizado != "despesa")
+                    return BadRequest($"A IA retornou um tipo inválido: '{transacao.Tipo}'.");
+
+                transacao.Tipo = char.ToUpper(tipoNormalizado[0]) + tipoNormalizado[1..];
 
                 // 6. Salvamos no banco de dados local
                 _context.Transacoes.Add(transacao);

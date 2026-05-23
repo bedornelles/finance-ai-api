@@ -1,4 +1,5 @@
-using System.ComponentModel.DataAnnotations; // <-- 1. IMPORTANTE: Traz a biblioteca de seguranças do C#
+using System.ComponentModel.DataAnnotations;
+
 namespace RegistrAi.Api.Models
 {
     public class Transacao
@@ -18,7 +19,6 @@ namespace RegistrAi.Api.Models
         public DateTime Data { get; set; }
 
         [Required(ErrorMessage = "O tipo da transação é obrigatório.")]
-        [StringLength(20, ErrorMessage = "O tipo não pode passar de 20 letras.")]
-        public string Tipo { get; set; } = string.Empty; //sServe para identificar se é "Receita" ou "Despesa"
+        public string Tipo { get; set; } = string.Empty; //serve para identificar se é "Receita" ou "Despesa"
     }
 }

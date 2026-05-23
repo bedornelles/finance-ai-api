@@ -22,6 +22,13 @@ namespace RegistrAi.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Criar(Transacao transacao)
         {
+            // Normaliza para sempre salvar "Receita" ou "Despesa" com maiúscula correta,
+            // independente do que o Flutter mandar ("despesa", "DESPESA", "despEsa"...)
+            var tipoNormalizado = transacao.Tipo?.Trim().ToLower();
+
+            if (tipoNormalizado != "receita" && tipoNormalizado != "despesa")
+                return BadRequest("O tipo deve ser 'Receita' ou 'Despesa'.");
+
             _context.Transacoes.Add(transacao); // Prepara para salvar
             await _context.SaveChangesAsync(); // Efetiva no banco de dados
 
