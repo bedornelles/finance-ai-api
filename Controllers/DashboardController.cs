@@ -20,20 +20,21 @@ namespace RegistrAi.Api.Controllers
             // 1. CALCULA AS DATAS DO PERÍODO AUTOMATICAMENTE
             var hoje = DateTime.Today;
             DateTime inicio;
-            DateTime fim;
+            DateTime fim = hoje;
 
             if (periodo == "semana")
             {
                 // Pega o início da semana atual (segunda-feira)
                 var diasDesdeSegunda = ((int)hoje.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
                 inicio = hoje.AddDays(-diasDesdeSegunda);
-                fim = hoje;
+            }
+            else if (periodo == "ano") {
+                inicio = new DateTime(hoje.Year, 1, 1);
             }
             else
             {
                 // Pega o início e fim do mês atual
                 inicio = new DateTime(hoje.Year, hoje.Month, 1);
-                fim = hoje;
             }
 
             // Garante que o fim do período inclui o dia inteiro (23:59:59)
@@ -44,7 +45,17 @@ namespace RegistrAi.Api.Controllers
                 .Where(t => t.Data >= inicio && t.Data <= fimDoDia)
                 .ToListAsync();
 
-            // 3. TOTAIS GERAIS (números do topo do dashboard)
+            // 3. BUSCA SEPARADA PARA VARIAÇÃO 24H
+            var ontem = hoje.AddDays(-1);
+            var transacoesOntem = await _context.Transacoes
+                .Where(t => t.Data.Date == ontem)
+                .ToListAsync();
+            
+            var transacoesHoje = transacoes
+                .Where(t => t.Data.Date == hoje)
+                .ToList();
+
+            // 4. TOTAIS GERAIS (números do topo do dashboard)
             var totalReceitas = transacoes
                 .Where(t => t.Tipo == "Receita")
                 .Sum(t => t.Valor);
@@ -55,7 +66,20 @@ namespace RegistrAi.Api.Controllers
 
             var saldo = totalReceitas - totalDespesas;
 
-            // 4. EVOLUÇÃO POR DIA (dados para o gráfico de linha/barras)
+            var quantidadeTransacoes = transacoes.Count;
+
+            // 5. VARIAÇÃO 24H
+            var despesasHoje = transacoesHoje
+                .Where(t => t.Tipo == "Despesa")
+                .Sum(t => t.Valor);
+
+            var despesasOntem = transacoesOntem
+                .Where(t => t.Tipo == "Despesa")
+                .Sum(t => t.Valor);
+
+            var variacao24h = despesasHoje - despesasOntem;
+
+            // 6. EVOLUÇÃO POR DIA (dados para o gráfico de linha/barras)
             // Gera todos os dias do período, mesmo os que não têm transação
             var todosDias = Enumerable
                 .Range(0, (fim - inicio).Days + 1)
@@ -73,19 +97,22 @@ namespace RegistrAi.Api.Controllers
                     .Sum(t => t.Valor)
             }).ToList();
 
-            // 5. GASTOS POR CATEGORIA (dados para o gráfico de pizza)
-            var porCategoria = transacoes
-                .GroupBy(t => new { t.Categoria, t.Tipo })
+            // 7. GASTOS POR CATEGORIA (dados para o gráfico de pizza)
+           var porCategoria = transacoes
+                .Where(t => t.Tipo == "Despesa") // pizza só de despesas, igual ao layout
+                .GroupBy(t => t.Categoria)
                 .Select(g => new
                 {
-                    Categoria = g.Key.Categoria,
-                    Tipo = g.Key.Tipo,
-                    Total = g.Sum(t => t.Valor)
+                    Categoria = g.Key,
+                    Total = g.Sum(t => t.Valor),
+                    Percentual = totalDespesas > 0
+                        ? Math.Round((g.Sum(t => t.Valor) / totalDespesas) * 100, 1)
+                        : 0 // proteção para não dividir por zero
                 })
                 .OrderByDescending(c => c.Total)
                 .ToList();
 
-                // 6. MONTA E RETORNA O OBJETO COMPLETO
+                // 8. MONTA E RETORNA O OBJETO COMPLETO
             return Ok(new
             {
                 Periodo = periodo,
@@ -94,6 +121,8 @@ namespace RegistrAi.Api.Controllers
                 TotalReceitas = totalReceitas,
                 TotalDespesas = totalDespesas,
                 Saldo = saldo,
+                QuantidadeTransacoes = quantidadeTransacoes,
+                Variacao24h = variacao24h,
                 PorDia = porDia,
                 PorCategoria = porCategoria
             });
