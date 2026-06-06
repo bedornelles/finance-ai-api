@@ -194,7 +194,7 @@ namespace RegistrAi.Api.Controllers
 
             string jsonEnvio = JsonSerializer.Serialize(corpoRequisicao);
             var conteudo = new StringContent(jsonEnvio, Encoding.UTF8, "application/json");
-            string urlGoogle = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={_apiKey}";
+            string urlGoogle = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
 
             var respostaGoogle = await _httpClient.PostAsync(urlGoogle, conteudo);
 
@@ -215,6 +215,8 @@ namespace RegistrAi.Api.Controllers
                 .GetProperty("text").GetString();
 
             textoIa = textoIa!.Replace("```json", "").Replace("```", "").Trim();
+
+            Console.WriteLine($"RESPOSTA DA IA: {textoIa}");
 
             // CONVERTE O JSON DA IA PARA UM OBJETO C#
             using var respostaIa = JsonDocument.Parse(textoIa);
@@ -362,6 +364,13 @@ namespace RegistrAi.Api.Controllers
                     {
                         Tipo = "cancelado",
                         Mensagem = "Ok, a transação não foi registrada.",
+                        TransacaoPendente = null
+                    });
+                case "confirmado":
+                    return Ok(new RespostaChat
+                    {
+                        Tipo = "confirmado",
+                        Mensagem = "",
                         TransacaoPendente = null
                     });
 
