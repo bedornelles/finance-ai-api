@@ -63,7 +63,7 @@ namespace RegistrAi.Api.Controllers
             // Flutter guarda isso para mandar ao /confirmar quando usuário digitar "sim"
         }
 
-       private string MontarPrompt(string textoUsuario, List<MensagemHistorico> historico)
+       private string MontarPrompt(string textoUsuario, List<MensagemHistorico> historico, string categoriasExistentes)
         {
             string dataAtual = DateTime.Now.ToString("yyyy-MM-dd");
 
@@ -156,12 +156,50 @@ namespace RegistrAi.Api.Controllers
                 }}
 
                 ════════════════════════════════════
+                TIPO 4 — EXCLUSÃO DE TRANSAÇÃO
+                ════════════════════════════════════
+                O usuário quer excluir uma transação já registrada.
+                Exemplos: 'excluir compra de bergamota do dia 12', 
+                        'apagar gasto de 90 reais em calçados',
+                        'deletar transação de alimentação de ontem'
+
+                Retorne APENAS este JSON:
+                {{
+                    ""classificacao"": ""exclusao_pendente"",
+                    ""filtros_exclusao"": {{
+                        ""categoria"": (categoria mencionada ou null),
+                        ""valor"": (valor mencionado como número ou null),
+                        ""data"": (data mencionada no formato YYYY-MM-DD ou null),
+                        ""tipo"": (""Despesa"" ou ""Receita"" ou null)
+                    }},
+                    ""mensagem"": null,
+                    ""transacao"": null
+                }}
+
+                ════════════════════════════════════
                 REGRAS IMPORTANTES
                 ════════════════════════════════════
                 - Retorne SEMPRE apenas JSON válido, sem markdown, sem texto fora do JSON
                 - Se o usuário falar 'ontem', subtraia 1 dia de {dataAtual}
                 - Seja objetivo nas perguntas: 'Qual o valor?' e não 'Poderia me informar o valor?'
-                - A categoria deve ser curta: 'Alimentação', 'Transporte', 'Saúde', 'Mercado', etc
+                - A categoria deve representar o GRUPO do gasto, nunca o item específico.
+                  ERRADO: 'Bergamota', 'Heineken', 'Tênis Nike', 'Pizza'
+                  CERTO: 'Alimentação', 'Bebidas', 'Vestuário', 'Alimentação'
+                - Exemplos de classificação:
+                  'comprei bergamota' → Alimentação
+                  'gastei em cerveja' → Bebidas
+                  'comprei um tênis' → Vestuário
+                  'paguei o uber' → Transporte
+                  'comprei remédio' → Saúde
+                  'paguei Netflix' → Assinaturas
+
+                ════════════════════════════════════
+                CATEGORIAS JÁ UTILIZADAS PELO USUÁRIO
+                ════════════════════════════════════
+                {categoriasExistentes}
+                REGRA: Prefira SEMPRE uma categoria já existente se fizer sentido.
+                Só crie uma categoria nova se nenhuma existente se encaixar.
+                A categoria deve ser curta (1 ou 2 palavras) e clara.
 
                 ════════════════════════════════════
                 HISTÓRICO DA CONVERSA
@@ -169,6 +207,8 @@ namespace RegistrAi.Api.Controllers
                 {(string.IsNullOrEmpty(historicoTexto) ? "Nenhum histórico ainda." : historicoTexto)}
 
                 Mensagem atual do usuário: '{textoUsuario}'";
+
+                
             }
 
         // ═══════════════════════════════════════
@@ -231,9 +271,25 @@ namespace RegistrAi.Api.Controllers
                 });
             }
 
-            // MONTA E ENVIA O PROMPT PARA O GEMINI
-            // COLOCA ISSO NO LUGAR:
-            string prompt = MontarPrompt(requisicao.Texto, requisicao.Historico);
+            // Busca categorias já usadas no banco
+            var categoriasDespesas = await _context.Transacoes
+                .Where(t => t.Tipo == "Despesa")
+                .Select(t => t.Categoria)
+                .Distinct()
+                .ToListAsync();
+
+            var categoriasReceitas = await _context.Transacoes
+                .Where(t => t.Tipo == "Receita")
+                .Select(t => t.Categoria)
+                .Distinct()
+                .ToListAsync();
+
+            var categoriasExistentes = categoriasDespesas.Any() || categoriasReceitas.Any()
+                ? $"Despesas: {(categoriasDespesas.Any() ? string.Join(", ", categoriasDespesas) : "nenhuma ainda")}\n" +
+                $"Receitas: {(categoriasReceitas.Any() ? string.Join(", ", categoriasReceitas) : "nenhuma ainda")}"
+                : "Nenhuma categoria cadastrada ainda — crie categorias curtas e claras.";
+
+            string prompt = MontarPrompt(requisicao.Texto, requisicao.Historico, categoriasExistentes);
 
             string textoIa;
             try
@@ -354,6 +410,16 @@ namespace RegistrAi.Api.Controllers
                         .OrderByDescending(g => g.Total)
                         .ToList();
 
+                    var transacoesDetalhadas = transacoesFiltradas
+                        .Where(t => string.IsNullOrEmpty(tipo) || t.Tipo == tipo)
+                        .OrderByDescending(t => t.Data)
+                        .Select(t => new {
+                            Data = t.Data.ToString("dd/MM/yyyy"),
+                            t.Categoria,
+                            t.Tipo,
+                            Valor = $"R${t.Valor:F2}"
+                        }).ToList();
+
                     string promptResposta = $@"
                         O usuário perguntou: '{requisicao.Texto}'
                         Os dados encontrados no banco foram:
@@ -363,9 +429,16 @@ namespace RegistrAi.Api.Controllers
                         - Quantidade de transações: {quantidadeConsulta}
                         - Por categoria: {JsonSerializer.Serialize(porCategoriaConsulta)}
                         - Período: de {dataInicio:dd/MM/yyyy} até {dataFim:dd/MM/yyyy}
+                        - Lista completa de transações: {JsonSerializer.Serialize(transacoesDetalhadas)}
+                        - Filtro de tipo aplicado: {(string.IsNullOrEmpty(tipo) ? "nenhum (todas)" : tipo)}
 
-                        Responda de forma humanizada, amigável e resumida em português.
-                        Não use markdown. Seja direto. Máximo 2 linhas.";
+                        IMPORTANTE: Se o usuário pediu para LISTAR ou VER transações,
+                        liste APENAS as transações da lista acima — não invente nem adicione outras.
+                        Se foi aplicado filtro de tipo, liste SOMENTE as do tipo filtrado.
+                        Formato de listagem: '• [data] - [categoria]: [valor]'
+                        
+                        Para perguntas de RESUMO ou SALDO, responda de forma humanizada e resumida.
+                        Não use markdown. Máximo 2 linhas para resumos.";
 
                     var respostaHumanizada = await ChamarOpenAI(promptResposta);
 
@@ -373,6 +446,68 @@ namespace RegistrAi.Api.Controllers
                     {
                         Tipo = "pergunta",
                         Mensagem = respostaHumanizada!.Trim(),
+                        TransacaoPendente = null
+                    });
+                }
+
+                case "exclusao_pendente":
+                {
+                    var filtrosExclusao = respostaIa.RootElement.GetProperty("filtros_exclusao");
+
+                    // Extrai os filtros que a IA identificou
+                    var catExclusao = filtrosExclusao.TryGetProperty("categoria", out var ce) ? ce.GetString() : null;
+                    var valorExclusao = filtrosExclusao.TryGetProperty("valor", out var ve) ? (ve.ValueKind == JsonValueKind.Number ? ve.GetDecimal() : (decimal?)null) : null;
+                    var dataExclusao = filtrosExclusao.TryGetProperty("data", out var de) ? de.GetString() : null;
+                    var tipoExclusao = filtrosExclusao.TryGetProperty("tipo", out var te) ? te.GetString() : null;
+
+                    // Busca no banco com os filtros
+                    var queryExclusao = _context.Transacoes.AsQueryable();
+
+                    if (!string.IsNullOrEmpty(catExclusao))
+                        queryExclusao = queryExclusao.Where(t => t.Categoria.ToLower().Contains(catExclusao.ToLower()));
+
+                    if (valorExclusao.HasValue)
+                        queryExclusao = queryExclusao.Where(t => t.Valor == valorExclusao.Value);
+
+                    if (!string.IsNullOrEmpty(dataExclusao) && DateTime.TryParse(dataExclusao, out var dataParsed))
+                        queryExclusao = queryExclusao.Where(t => t.Data.Date == dataParsed.Date);
+
+                    if (!string.IsNullOrEmpty(tipoExclusao))
+                        queryExclusao = queryExclusao.Where(t => t.Tipo == tipoExclusao);
+
+                    var transacoesEncontradas = await queryExclusao.ToListAsync();
+
+                    // Nenhuma encontrada
+                    if (!transacoesEncontradas.Any())
+                    {
+                        return Ok(new RespostaChat
+                        {
+                            Tipo = "erro",
+                            Mensagem = "Não encontrei nenhuma transação com essas características. Tente ser mais específico.",
+                            TransacaoPendente = null
+                        });
+                    }
+
+                    // Encontrou exatamente 1 — pede confirmação
+                    if (transacoesEncontradas.Count == 1)
+                    {
+                        var t = transacoesEncontradas[0];
+                        return Ok(new RespostaChat
+                        {
+                            Tipo = "exclusao_confirmacao",
+                            Mensagem = $"Encontrei: {t.Tipo} de R${t.Valor:F2} em {t.Categoria} em {t.Data:dd/MM/yyyy}. Deseja excluir?",
+                            TransacaoPendente = t // reutilizamos para guardar o ID
+                        });
+                    }
+
+                    // Encontrou mais de 1 — lista para o usuário escolher
+                    var lista = string.Join("\n", transacoesEncontradas
+                        .Select((t, i) => $"• {i + 1}. R${t.Valor:F2} em {t.Categoria} em {t.Data:dd/MM/yyyy}"));
+
+                    return Ok(new RespostaChat
+                    {
+                        Tipo = "exclusao_multipla",
+                        Mensagem = $"Encontrei {transacoesEncontradas.Count} transações. Qual deseja excluir?\n{lista}",
                         TransacaoPendente = null
                     });
                 }
@@ -436,5 +571,35 @@ namespace RegistrAi.Api.Controllers
                 TransacaoPendente = null
             });
         }
+
+        // ═══════════════════════════════════════
+        // ENDPOINT 3 — EXCLUIR
+        // ═══════════════════════════════════════
+        [HttpDelete("excluir/{id}")]
+        public async Task<IActionResult> Excluir(int id)
+        {
+            var transacao = await _context.Transacoes.FindAsync(id);
+
+            if (transacao == null)
+                return NotFound("Transação não encontrada.");
+
+            _context.Transacoes.Remove(transacao);
+            await _context.SaveChangesAsync();
+
+            return Ok(new RespostaChat
+            {
+                Tipo = "excluido",
+                Mensagem = $"✅ {transacao.Tipo} de R${transacao.Valor:F2} em {transacao.Categoria} excluída com sucesso!",
+                TransacaoPendente = null
+            });
+        }
+
+        [HttpDelete("reset")]
+public async Task<IActionResult> Reset()
+{
+    _context.Transacoes.RemoveRange(_context.Transacoes);
+    await _context.SaveChangesAsync();
+    return Ok("Todas as transações foram removidas.");
+}
     }
 }
