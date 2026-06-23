@@ -18,7 +18,7 @@ namespace RegistrAi.Api.Controllers
         public TransacoesIaController(AppDbContext context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
         {
             _context = context;
-            _apiKey = configuration["Gemini:ApiKey"]!; 
+            _apiKey = configuration["OpenAI:ApiKey"]!;
             _httpClient = httpClientFactory.CreateClient();
         }
 
@@ -89,6 +89,12 @@ namespace RegistrAi.Api.Controllers
                 - categoria (assunto do gasto/receita)
                 - tipo ('Despesa' ou 'Receita')
                 - data (se não mencionar, use a data de hoje: {dataAtual})
+
+                IMPORTANTE — como identificar o TIPO automaticamente pelo verbo usado:
+                Use 'Despesa' quando o usuário usar verbos como: comprei, gastei, paguei, comprando, gasto.
+                Use 'Receita' quando o usuário usar verbos como: recebi, ganhei, faturei, vendi, recebimento.
+                NUNCA pergunte ao usuário se é despesa ou receita — infira pelo contexto da frase.
+                Só pergunte o tipo se a frase for genuinamente ambígua e não tiver nenhum verbo claro (ex: apenas '50 reais mercado').
 
                 Se tiver TUDO → retorne APENAS este JSON:
                 {{
@@ -165,6 +171,50 @@ namespace RegistrAi.Api.Controllers
                 Mensagem atual do usuário: '{textoUsuario}'";
             }
 
+        // ═══════════════════════════════════════
+        // MÉTODO PRIVADO — CHAMA A OPENAI
+        // ═══════════════════════════════════════
+        private async Task<string> ChamarOpenAI(string prompt)
+        {
+            var corpoRequisicao = new
+            {
+                model = "gpt-4o-mini",
+                messages = new[]
+                {
+                    new { role = "user", content = prompt }
+                }
+            };
+
+            var conteudo = new StringContent(
+                JsonSerializer.Serialize(corpoRequisicao),
+                Encoding.UTF8,
+                "application/json"
+            );
+
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+
+            var resposta = await _httpClient.PostAsync(
+                "https://api.openai.com/v1/chat/completions",
+                conteudo
+            );
+
+            var jsonResposta = await resposta.Content.ReadAsStringAsync();
+
+            if (!resposta.IsSuccessStatusCode)
+                throw new Exception($"Erro OpenAI: {jsonResposta}");
+
+            using var documento = JsonDocument.Parse(jsonResposta);
+            return documento.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString()!;
+        }
+
+        // ═══════════════════════════════════════
+        // ENDPOINT 1 — INTERPRETAR
+        // ═══════════════════════════════════════
         [HttpPost("interpretar")]
         public async Task<IActionResult> Interpretar([FromBody] RequisicaoChat requisicao)
         {
@@ -182,41 +232,20 @@ namespace RegistrAi.Api.Controllers
             }
 
             // MONTA E ENVIA O PROMPT PARA O GEMINI
+            // COLOCA ISSO NO LUGAR:
             string prompt = MontarPrompt(requisicao.Texto, requisicao.Historico);
 
-            var corpoRequisicao = new
+            string textoIa;
+            try
             {
-                contents = new[]
-                {
-                    new { parts = new[] { new { text = prompt } } }
-                }
-            };
-
-            string jsonEnvio = JsonSerializer.Serialize(corpoRequisicao);
-            var conteudo = new StringContent(jsonEnvio, Encoding.UTF8, "application/json");
-            string urlGoogle = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
-
-            var respostaGoogle = await _httpClient.PostAsync(urlGoogle, conteudo);
-
-            if (!respostaGoogle.IsSuccessStatusCode)
-            {
-                string erroDetalhado = await respostaGoogle.Content.ReadAsStringAsync();
-                return StatusCode(500, $"Erro ao chamar a IA: {erroDetalhado}");
+                textoIa = await ChamarOpenAI(prompt);
+                textoIa = textoIa.Replace("```json", "").Replace("```", "").Trim();
+                Console.WriteLine($"RESPOSTA DA IA: {textoIa}");
             }
-
-            // LÊ E LIMPA A RESPOSTA DO GEMINI
-            string jsonResposta = await respostaGoogle.Content.ReadAsStringAsync();
-
-            using var documento = JsonDocument.Parse(jsonResposta);
-            var textoIa = documento.RootElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts")[0]
-                .GetProperty("text").GetString();
-
-            textoIa = textoIa!.Replace("```json", "").Replace("```", "").Trim();
-
-            Console.WriteLine($"RESPOSTA DA IA: {textoIa}");
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao chamar a IA: {ex.Message}");
+            }
 
             // CONVERTE O JSON DA IA PARA UM OBJETO C#
             using var respostaIa = JsonDocument.Parse(textoIa);
@@ -307,19 +336,30 @@ namespace RegistrAi.Api.Controllers
                     var transacoesFiltradas = await query.ToListAsync();
 
                     // Monta o resumo para a IA formatar a resposta
-                    var totalConsulta = transacoesFiltradas.Sum(t => t.Valor);
+                    var totalReceitasConsulta = transacoesFiltradas
+                        .Where(t => t.Tipo == "Receita")
+                        .Sum(t => t.Valor);
+
+                    var totalDespesasConsulta = transacoesFiltradas
+                        .Where(t => t.Tipo == "Despesa")
+                        .Sum(t => t.Valor);
+
+                    var saldoConsulta = totalReceitasConsulta - totalDespesasConsulta;
+
                     var quantidadeConsulta = transacoesFiltradas.Count;
+
                     var porCategoriaConsulta = transacoesFiltradas
                         .GroupBy(t => t.Categoria)
                         .Select(g => new { Categoria = g.Key, Total = g.Sum(t => t.Valor) })
                         .OrderByDescending(g => g.Total)
                         .ToList();
 
-                    // Pede para a IA formatar a resposta de forma humanizada
                     string promptResposta = $@"
                         O usuário perguntou: '{requisicao.Texto}'
                         Os dados encontrados no banco foram:
-                        - Total: R${totalConsulta:F2}
+                        - Total Receitas: R${totalReceitasConsulta:F2}
+                        - Total Despesas: R${totalDespesasConsulta:F2}
+                        - Saldo: R${saldoConsulta:F2}
                         - Quantidade de transações: {quantidadeConsulta}
                         - Por categoria: {JsonSerializer.Serialize(porCategoriaConsulta)}
                         - Período: de {dataInicio:dd/MM/yyyy} até {dataFim:dd/MM/yyyy}
@@ -327,28 +367,7 @@ namespace RegistrAi.Api.Controllers
                         Responda de forma humanizada, amigável e resumida em português.
                         Não use markdown. Seja direto. Máximo 2 linhas.";
 
-                    var corpoResposta = new
-                    {
-                        contents = new[]
-                        {
-                            new { parts = new[] { new { text = promptResposta } } }
-                        }
-                    };
-
-                    var respostaFormatada = await _httpClient.PostAsync(
-                        urlGoogle,
-                        new StringContent(JsonSerializer.Serialize(corpoResposta), Encoding.UTF8, "application/json")
-                    );
-
-                    var jsonRespostaFormatada = await respostaFormatada.Content.ReadAsStringAsync();
-
-                    using var docFormatado = JsonDocument.Parse(jsonRespostaFormatada);
-
-                    var respostaHumanizada = docFormatado.RootElement
-                        .GetProperty("candidates")[0]
-                        .GetProperty("content")
-                        .GetProperty("parts")[0]
-                        .GetProperty("text").GetString();
+                    var respostaHumanizada = await ChamarOpenAI(promptResposta);
 
                     return Ok(new RespostaChat
                     {
