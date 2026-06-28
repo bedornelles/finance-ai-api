@@ -99,18 +99,22 @@ namespace RegistrAi.Api.Controllers
 
             // 7. GASTOS POR CATEGORIA (dados para o gráfico de pizza)
            var porCategoria = transacoes
-                .Where(t => t.Tipo == "Despesa") // pizza só de despesas, igual ao layout
-                .GroupBy(t => t.Categoria)
-                .Select(g => new
-                {
-                    Categoria = g.Key,
-                    Total = g.Sum(t => t.Valor),
-                    Percentual = totalDespesas > 0
+            .GroupBy(t => new { t.Categoria, t.Tipo })
+            .Select(g => new
+            {
+                Categoria = g.Key.Categoria,
+                Tipo = g.Key.Tipo,
+                Total = g.Sum(t => t.Valor),
+                Percentual = g.Key.Tipo == "Despesa"
+                    ? (totalDespesas > 0
                         ? Math.Round((g.Sum(t => t.Valor) / totalDespesas) * 100, 1)
-                        : 0 // proteção para não dividir por zero
-                })
-                .OrderByDescending(c => c.Total)
-                .ToList();
+                        : 0)
+                    : (totalReceitas > 0
+                        ? Math.Round((g.Sum(t => t.Valor) / totalReceitas) * 100, 1)
+                        : 0)
+            })
+            .OrderByDescending(c => c.Total)
+            .ToList();
 
                 // 8. MONTA E RETORNA O OBJETO COMPLETO
             return Ok(new
