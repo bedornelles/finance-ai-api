@@ -88,7 +88,7 @@ namespace RegistrAi.Api.Controllers
                 - valor (número)
                 - categoria (assunto do gasto/receita)
                 - tipo ('Despesa' ou 'Receita')
-                - data (se não mencionar, use a data de hoje: {dataAtual})
+                - data (OBRIGATÓRIO: se o usuário não mencionar data, use SEMPRE a data de hoje: {dataAtual}. NUNCA pergunte a data.)
 
                 IMPORTANTE — como identificar o TIPO automaticamente pelo verbo usado:
                 Use 'Despesa' quando o usuário usar verbos como: comprei, gastei, paguei, comprando, gasto.
@@ -185,19 +185,44 @@ namespace RegistrAi.Api.Controllers
                 - A categoria deve representar o GRUPO do gasto, nunca o item específico.
                   ERRADO: 'Bergamota', 'Heineken', 'Tênis Nike', 'Pizza'
                   CERTO: 'Alimentação', 'Bebidas', 'Vestuário', 'Alimentação'
+                - NUNCA force uma categoria existente se não fizer sentido.
+                  Prefira criar uma categoria nova correta do que usar uma existente errada.
+                  Exemplo: se só existe 'Moradia' no banco mas o gasto é com faculdade,
+                  crie 'Educação' — não use 'Moradia'.
                 - Exemplos de classificação:
                   'comprei bergamota' → Alimentação
+                  'fui ao mercado' → Mercado
+                  'comprei no supermercado' → Mercado
                   'gastei em cerveja' → Bebidas
+                  'fui ao bar' → Bebidas
                   'comprei um tênis' → Vestuário
                   'paguei o uber' → Transporte
+                  'abasteci o carro' → Gasolina
                   'comprei remédio' → Saúde
                   'paguei Netflix' → Assinaturas
+                  'paguei aluguel' → Moradia
+                  'paguei condomínio' → Moradia
+                  'conta de luz' → Moradia
+                  'conta de água' → Moradia
+                  'internet' → Moradia
+                  'recebi meu salário' → Salário
+                  'fiz um freela' → Freelance
+                  'vendi algo' → Vendas
+                  'recebi presente' → Presente
+                  'fui ao restaurante' → Alimentação
+                  'pedi delivery' → Alimentação
+                  'paguei mensalidade' → Educação
+                  'paguei a faculdade' → Educação
+                  'paguei o colégio' → Educação
+                  'comprei livro' → Educação
+                  'paguei curso' → Educação
+                  'mensalidade escolar' → Educação
 
                 ════════════════════════════════════
                 CATEGORIAS JÁ UTILIZADAS PELO USUÁRIO
                 ════════════════════════════════════
                 {categoriasExistentes}
-                REGRA: Prefira SEMPRE uma categoria já existente se fizer sentido.
+                REGRA: Prefira quando possivel usar uma categoria já existente se fizer sentido.
                 Só crie uma categoria nova se nenhuma existente se encaixar.
                 A categoria deve ser curta (1 ou 2 palavras) e clara.
 
