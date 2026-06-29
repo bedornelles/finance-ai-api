@@ -116,6 +116,19 @@ namespace RegistrAi.Api.Controllers
             .OrderByDescending(c => c.Total)
             .ToList();
 
+            var ultimasTransacoes = transacoes
+            .OrderByDescending(t => t.Data)
+            .Take(5)
+            .Select(t => new
+            {
+                t.Id,
+                t.Valor,
+                t.Categoria,
+                t.Data,
+                t.Tipo
+            })
+            .ToList();
+
                 // 8. MONTA E RETORNA O OBJETO COMPLETO
             return Ok(new
             {
@@ -128,7 +141,8 @@ namespace RegistrAi.Api.Controllers
                 QuantidadeTransacoes = quantidadeTransacoes,
                 Variacao24h = variacao24h,
                 PorDia = porDia,
-                PorCategoria = porCategoria
+                PorCategoria = porCategoria,
+                UltimasTransacoes = ultimasTransacoes,
             });
         }
     }
