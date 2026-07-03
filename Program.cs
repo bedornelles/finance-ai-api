@@ -17,6 +17,13 @@ builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
+// Aplica as migrations pendentes automaticamente ao subir a aplicação
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
