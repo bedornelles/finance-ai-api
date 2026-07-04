@@ -14,6 +14,7 @@ namespace RegistrAi.Api.Controllers
         private readonly AppDbContext _context;
         private readonly string _apiKey;
         private readonly HttpClient _httpClient;
+        private static readonly System.Globalization.CultureInfo _culturaBr = new System.Globalization.CultureInfo("pt-BR");
 
         public TransacoesIaController(AppDbContext context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
         {
@@ -340,7 +341,7 @@ namespace RegistrAi.Api.Controllers
                     var tipoNormalizado = transacaoPendente!.Tipo?.Trim().ToLower();
                     transacaoPendente.Tipo = char.ToUpper(tipoNormalizado![0]) + tipoNormalizado[1..];
 
-                    var mensagemConfirmacao = $"Vou registrar R${transacaoPendente.Valor:F2} em {transacaoPendente.Categoria} em {transacaoPendente.Data:dd/MM/yyyy}. Confirma?";
+                    var mensagemConfirmacao = $"Vou registrar R${transacaoPendente.Valor.ToString("N2", _culturaBr)} em {transacaoPendente.Categoria} em {transacaoPendente.Data:dd/MM/yyyy}. Confirma?";
 
                     return Ok(new RespostaChat
                     {
@@ -431,15 +432,15 @@ namespace RegistrAi.Api.Controllers
                             Data = t.Data.ToString("dd/MM/yyyy"),
                             t.Categoria,
                             t.Tipo,
-                            Valor = $"R${t.Valor:F2}"
+                            Valor = $"R${t.Valor.ToString("N2", _culturaBr)}"
                         }).ToList();
 
                     string promptResposta = $@"
                         O usuário perguntou: '{requisicao.Texto}'
                         Os dados encontrados no banco foram:
-                        - Total Receitas: R${totalReceitasConsulta:F2}
-                        - Total Despesas: R${totalDespesasConsulta:F2}
-                        - Saldo: R${saldoConsulta:F2}
+                        - Total Receitas: R${totalReceitasConsulta.ToString("N2", _culturaBr)}
+                        - Total Despesas: R${totalDespesasConsulta.ToString("N2", _culturaBr)}
+                        - Saldo: R${saldoConsulta.ToString("N2", _culturaBr)}
                         - Quantidade de transações: {quantidadeConsulta}
                         - Por categoria: {JsonSerializer.Serialize(porCategoriaConsulta)}
                         - Período: de {dataInicio:dd/MM/yyyy} até {dataFim:dd/MM/yyyy}
@@ -509,14 +510,14 @@ namespace RegistrAi.Api.Controllers
                         return Ok(new RespostaChat
                         {
                             Tipo = "exclusao_confirmacao",
-                            Mensagem = $"Encontrei: {t.Tipo} de R${t.Valor:F2} em {t.Categoria} em {t.Data:dd/MM/yyyy}. Deseja excluir?",
+                            Mensagem = $"Encontrei: {t.Tipo} de R${t.Valor.ToString("N2", _culturaBr)} em {t.Categoria} em {t.Data:dd/MM/yyyy}. Deseja excluir?",
                             TransacaoPendente = t // reutilizamos para guardar o ID
                         });
                     }
 
                     // Encontrou mais de 1 — lista para o usuário escolher
                     var lista = string.Join("\n", transacoesEncontradas
-                        .Select((t, i) => $"• {i + 1}. R${t.Valor:F2} em {t.Categoria} em {t.Data:dd/MM/yyyy}"));
+                        .Select((t, i) => $"• {i + 1}. R${t.Valor.ToString("N2", _culturaBr)} em {t.Categoria} em {t.Data:dd/MM/yyyy}"));
 
                     return Ok(new RespostaChat
                     {
@@ -581,7 +582,7 @@ namespace RegistrAi.Api.Controllers
             return Ok(new RespostaChat
             {
                 Tipo = "salvo",
-                Mensagem = $"✅ {transacao.Tipo} de R${transacao.Valor:F2} em {transacao.Categoria} registrada com sucesso!",
+                Mensagem = $"✅ {transacao.Tipo} de R${transacao.Valor.ToString("N2", _culturaBr)} em {transacao.Categoria} registrada com sucesso!",
                 TransacaoPendente = null
             });
         }
@@ -603,7 +604,7 @@ namespace RegistrAi.Api.Controllers
             return Ok(new RespostaChat
             {
                 Tipo = "excluido",
-                Mensagem = $"✅ {transacao.Tipo} de R${transacao.Valor:F2} em {transacao.Categoria} excluída com sucesso!",
+                Mensagem = $"✅ {transacao.Tipo} de R${transacao.Valor.ToString("N2", _culturaBr)} em {transacao.Categoria} excluída com sucesso!",
                 TransacaoPendente = null
             });
         }
