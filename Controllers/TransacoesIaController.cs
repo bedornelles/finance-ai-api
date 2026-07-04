@@ -183,9 +183,16 @@ namespace RegistrAi.Api.Controllers
                 - Retorne SEMPRE apenas JSON válido, sem markdown, sem texto fora do JSON
                 - Se o usuário falar 'ontem', subtraia 1 dia de {dataAtual}
                 - Seja objetivo nas perguntas: 'Qual o valor?' e não 'Poderia me informar o valor?'
-                - A categoria deve representar o GRUPO do gasto, nunca o item específico.
-                  ERRADO: 'Bergamota', 'Heineken', 'Tênis Nike', 'Pizza'
-                  CERTO: 'Alimentação', 'Bebidas', 'Vestuário', 'Alimentação'
+                - Quando existir uma categoria MAIS ESPECÍFICA na lista permitida que já cobre o caso
+                    (ex: 'Estacionamento', 'Combustível', 'Pedágio' dentro do grupo de Transporte;
+                    'Farmácia', 'Consulta' dentro do grupo de Saúde), use ESSA categoria específica,
+                    e não a categoria mais genérica do mesmo grupo.
+                    ERRADO: gasto em estacionamento → categoria 'Transporte'
+                    CERTO: gasto em estacionamento → categoria 'Estacionamento'
+                - A categoria NUNCA deve ser o nome do produto, marca ou item comprado
+                    (isso é diferente de escolher entre categorias específicas ou genéricas da lista — veja a regra anterior).
+                    ERRADO: 'Bergamota', 'Heineken', 'Tênis Nike', 'Pizza'
+                    CERTO: 'Alimentação', 'Bebidas', 'Vestuário'
                  - CATEGORIAS PERMITIDAS:
                   Despesas: 
                     Alimentação, Mercado, Restaurante, Delivery, Bebidas,
