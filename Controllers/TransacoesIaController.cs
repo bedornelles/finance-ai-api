@@ -340,8 +340,7 @@ namespace RegistrAi.Api.Controllers
                     var tipoNormalizado = transacaoPendente!.Tipo?.Trim().ToLower();
                     transacaoPendente.Tipo = char.ToUpper(tipoNormalizado![0]) + tipoNormalizado[1..];
 
-                    var mensagemConfirmacao = respostaIa.RootElement
-                        .GetProperty("mensagem").GetString();
+                    var mensagemConfirmacao = $"Vou registrar R${transacaoPendente.Valor:F2} em {transacaoPendente.Categoria} em {transacaoPendente.Data:dd/MM/yyyy}. Confirma?";
 
                     return Ok(new RespostaChat
                     {
