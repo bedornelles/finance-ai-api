@@ -23,6 +23,8 @@ namespace RegistrAi.Api.Controllers
             _httpClient = httpClientFactory.CreateClient();
         }
 
+        private string DispositivoIdAtual => Request.Headers["X-Device-Id"].ToString();
+
         public class RequisicaoChat
         {
             public string Texto { get; set; } = string.Empty;
@@ -296,13 +298,13 @@ namespace RegistrAi.Api.Controllers
 
             // Busca categorias já usadas no banco
             var categoriasDespesas = await _context.Transacoes
-                .Where(t => t.Tipo == "Despesa")
+                .Where(t => t.DispositivoId == DispositivoIdAtual && t.Tipo == "Despesa")
                 .Select(t => t.Categoria)
                 .Distinct()
                 .ToListAsync();
 
             var categoriasReceitas = await _context.Transacoes
-                .Where(t => t.Tipo == "Receita")
+                .Where(t => t.DispositivoId == DispositivoIdAtual && t.Tipo == "Receita")
                 .Select(t => t.Categoria)
                 .Distinct()
                 .ToListAsync();
@@ -347,6 +349,7 @@ namespace RegistrAi.Api.Controllers
                     // Normaliza o Tipo (mesma lógica que já tínhamos)
                     var tipoNormalizado = transacaoPendente!.Tipo?.Trim().ToLower();
                     transacaoPendente.Tipo = char.ToUpper(tipoNormalizado![0]) + tipoNormalizado[1..];
+                    transacaoPendente.DispositivoId = DispositivoIdAtual;
 
                     var mensagemConfirmacao = $"Vou registrar R${transacaoPendente.Valor.ToString("N2", _culturaBr)} em {transacaoPendente.Categoria} em {transacaoPendente.Data:dd/MM/yyyy}. Confirma?";
 
@@ -402,7 +405,7 @@ namespace RegistrAi.Api.Controllers
                     }
 
                     // Consulta o banco com os filtros
-                    var query = _context.Transacoes.AsQueryable();
+                    var query = _context.Transacoes.Where(t => t.DispositivoId == DispositivoIdAtual);
                     query = query.Where(t => t.Data >= dataInicio && t.Data <= dataFim);
 
                     if (!string.IsNullOrEmpty(categoria))
@@ -483,7 +486,7 @@ namespace RegistrAi.Api.Controllers
                     var tipoExclusao = filtrosExclusao.TryGetProperty("tipo", out var te) ? te.GetString() : null;
 
                     // Busca no banco com os filtros
-                    var queryExclusao = _context.Transacoes.AsQueryable();
+                     var queryExclusao = _context.Transacoes.Where(t => t.DispositivoId == DispositivoIdAtual);
 
                     if (!string.IsNullOrEmpty(catExclusao))
                         queryExclusao = queryExclusao.Where(t => t.Categoria.ToLower().Contains(catExclusao.ToLower()));
@@ -574,6 +577,9 @@ namespace RegistrAi.Api.Controllers
             if (transacao == null)
                 return BadRequest("Nenhuma transação recebida.");
 
+            if (string.IsNullOrWhiteSpace(DispositivoIdAtual))
+                return BadRequest("Cabeçalho X-Device-Id é obrigatório.");
+
             // Normaliza o Tipo por segurança (mesma lógica dos outros endpoints)
             var tipoNormalizado = transacao.Tipo?.Trim().ToLower();
 
@@ -581,6 +587,7 @@ namespace RegistrAi.Api.Controllers
                 return BadRequest($"Tipo inválido: '{transacao.Tipo}'.");
 
             transacao.Tipo = char.ToUpper(tipoNormalizado[0]) + tipoNormalizado[1..];
+            transacao.DispositivoId = DispositivoIdAtual;
 
             // Salva no banco
             _context.Transacoes.Add(transacao);
@@ -600,7 +607,8 @@ namespace RegistrAi.Api.Controllers
         [HttpDelete("excluir/{id}")]
         public async Task<IActionResult> Excluir(int id)
         {
-            var transacao = await _context.Transacoes.FindAsync(id);
+            var transacao = await _context.Transacoes
+                .FirstOrDefaultAsync(t => t.Id == id && t.DispositivoId == DispositivoIdAtual);
 
             if (transacao == null)
                 return NotFound("Transação não encontrada.");
@@ -617,11 +625,12 @@ namespace RegistrAi.Api.Controllers
         }
 
         [HttpDelete("reset")]
-public async Task<IActionResult> Reset()
-{
-    _context.Transacoes.RemoveRange(_context.Transacoes);
-    await _context.SaveChangesAsync();
-    return Ok("Todas as transações foram removidas.");
-}
+        public async Task<IActionResult> Reset()
+        {
+            var minhasTransacoes = _context.Transacoes.Where(t => t.DispositivoId == DispositivoIdAtual);
+            _context.Transacoes.RemoveRange(minhasTransacoes);
+            await _context.SaveChangesAsync();
+            return Ok("Todas as suas transações foram removidas.");
+        }
     }
 }
