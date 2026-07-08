@@ -14,13 +14,14 @@ namespace RegistrAi.Api.Controllers
         {
             _context = context;
         }
+        private string DispositivoIdAtual => Request.Headers["X-Device-Id"].ToString();
 
         // Endpoint: GET /api/resumo?inicio=2024-01-01&fim=2024-01-31
         [HttpGet]
         public async Task<IActionResult> ObterResumo([FromQuery] DateTime? inicio, [FromQuery] DateTime? fim)
         {
             // Criamos a consulta base (ainda sem executar no banco)
-            var consulta = _context.Transacoes.AsQueryable();
+            var consulta = _context.Transacoes.Where(t => t.DispositivoId == DispositivoIdAtual);
 
             // 1. Aplicamos o filtro de data de início, se o utilizador enviou
             if (inicio.HasValue)

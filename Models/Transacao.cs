@@ -20,5 +20,7 @@ namespace RegistrAi.Api.Models
 
         [Required(ErrorMessage = "O tipo da transação é obrigatório.")]
         public string Tipo { get; set; } = string.Empty; //serve para identificar se é "Receita" ou "Despesa"
+
+        public string DispositivoId { get; set; } = string.Empty;
     }
 }

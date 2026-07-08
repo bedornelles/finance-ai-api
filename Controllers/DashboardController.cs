@@ -14,6 +14,8 @@ namespace RegistrAi.Api.Controllers
         {
             _context = context;
         }
+        private string DispositivoIdAtual => Request.Headers["X-Device-Id"].ToString();
+
          [HttpGet]
         public async Task<IActionResult> ObterDashboard([FromQuery] string periodo = "mes")
         {
@@ -42,13 +44,13 @@ namespace RegistrAi.Api.Controllers
 
             // 2. BUSCA TODAS AS TRANSAÇÕES DO PERÍODO (uma única vez no banco)
             var transacoes = await _context.Transacoes
-                .Where(t => t.Data >= inicio && t.Data <= fimDoDia)
+                .Where(t => t.DispositivoId == DispositivoIdAtual && t.Data >= inicio && t.Data <= fimDoDia)
                 .ToListAsync();
 
             // 3. BUSCA SEPARADA PARA VARIAÇÃO 24H
             var ontem = hoje.AddDays(-1);
             var transacoesOntem = await _context.Transacoes
-                .Where(t => t.Data.Date == ontem)
+                .Where(t => t.DispositivoId == DispositivoIdAtual && t.Data.Date == ontem)
                 .ToListAsync();
             
             var transacoesHoje = transacoes

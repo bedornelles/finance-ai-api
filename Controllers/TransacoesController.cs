@@ -18,16 +18,23 @@ namespace RegistrAi.Api.Controllers
             _context = context;
         }
 
+         private string DispositivoIdAtual => Request.Headers["X-Device-Id"].ToString();
+
         // 1. Endpoint para CRIAR uma nova transação (POST)
         [HttpPost]
         public async Task<IActionResult> Criar(Transacao transacao)
         {
+            if (string.IsNullOrWhiteSpace(DispositivoIdAtual))
+                return BadRequest("Cabeçalho X-Device-Id é obrigatório.");
+
             // Normaliza para sempre salvar "Receita" ou "Despesa" com maiúscula correta,
             // independente do que o Flutter mandar ("despesa", "DESPESA", "despEsa"...)
             var tipoNormalizado = transacao.Tipo?.Trim().ToLower();
 
             if (tipoNormalizado != "receita" && tipoNormalizado != "despesa")
                 return BadRequest("O tipo deve ser 'Receita' ou 'Despesa'.");
+
+            transacao.DispositivoId = DispositivoIdAtual;
 
             _context.Transacoes.Add(transacao); // Prepara para salvar
             await _context.SaveChangesAsync(); // Efetiva no banco de dados
@@ -39,7 +46,9 @@ namespace RegistrAi.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> Listar()
         {
-            var transacoes = await _context.Transacoes.ToListAsync(); // Puxa tudo do banco
+            var transacoes = await _context.Transacoes
+                .Where(t => t.DispositivoId == DispositivoIdAtual)
+                .ToListAsync(); // Puxa tudo do banco
             return Ok(transacoes); // Devolve a lista (Status 200)
         }
 
@@ -47,8 +56,9 @@ namespace RegistrAi.Api.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> BuscarPorId(int id)
         {
-            var transacao = await _context.Transacoes.FindAsync(id);
-            if (transacao == null) return NotFound(); // Retorna 404 se não achar
+            var transacao = await _context.Transacoes
+                .FirstOrDefaultAsync(t => t.Id == id && t.DispositivoId == DispositivoIdAtual);
+            if (transacao == null) return NotFound();
             return Ok(transacao);
         }
 
@@ -58,7 +68,12 @@ namespace RegistrAi.Api.Controllers
         {
             if (id != transacaoAtualizada.Id) return BadRequest(); // Retorna 400 se os IDs não baterem
 
-            _context.Entry(transacaoAtualizada).State = EntityState.Modified;
+            var transacaoExistente = await _context.Transacoes
+                .FirstOrDefaultAsync(t => t.Id == id && t.DispositivoId == DispositivoIdAtual);
+            if (transacaoExistente == null) return NotFound();
+
+            transacaoAtualizada.DispositivoId = DispositivoIdAtual;
+            _context.Entry(transacaoExistente).CurrentValues.SetValues(transacaoAtualizada);
             await _context.SaveChangesAsync();
 
             return NoContent(); // Retorna 204 (Deu certo e não tem nada para mostrar)
@@ -68,7 +83,8 @@ namespace RegistrAi.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Deletar(int id)
         {
-            var transacao = await _context.Transacoes.FindAsync(id);
+            var transacao = await _context.Transacoes
+                .FirstOrDefaultAsync(t => t.Id == id && t.DispositivoId == DispositivoIdAtual);
             if (transacao == null) return NotFound();
 
             _context.Transacoes.Remove(transacao);
