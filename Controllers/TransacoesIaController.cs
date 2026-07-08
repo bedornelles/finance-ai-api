@@ -99,6 +99,12 @@ namespace RegistrAi.Api.Controllers
                 NUNCA pergunte ao usuário se é despesa ou receita — infira pelo contexto da frase.
                 Só pergunte o tipo se a frase for genuinamente ambígua e não tiver nenhum verbo claro (ex: apenas '50 reais mercado').
 
+                IMPORTANTE — como identificar a CATEGORIA automaticamente quando a própria frase já contém a palavra:
+                Se o usuário mencionar uma palavra que já é (ou corresponde diretamente a) uma das categorias permitidas
+                — como 'salário', 'aluguel', 'condomínio', 'internet', 'academia', 'mercado' —
+                use essa categoria diretamente, SEM perguntar.
+                Só pergunte a categoria se a frase for genuinamente vaga (ex: 'gastei 50 reais', sem nenhuma pista de assunto).
+
                 Se tiver TUDO → retorne APENAS este JSON:
                 {{
                     ""classificacao"": ""confirmacao_pendente"",
