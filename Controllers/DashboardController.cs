@@ -16,11 +16,17 @@ namespace RegistrAi.Api.Controllers
         }
         private string DispositivoIdAtual => Request.Headers["X-Device-Id"].ToString();
 
+         private DateTime HojeNoBrasil()
+        {
+            var fusoBrasil = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, fusoBrasil).Date;
+        }
+
          [HttpGet]
-        public async Task<IActionResult> ObterDashboard([FromQuery] string periodo = "mes")
+       public async Task<IActionResult> ObterDashboard([FromQuery] string periodo = "mes")
         {
             // 1. CALCULA AS DATAS DO PERÍODO AUTOMATICAMENTE
-            var hoje = DateTime.Today;
+            var hoje = HojeNoBrasil();
             DateTime inicio;
             DateTime fim = hoje;
 

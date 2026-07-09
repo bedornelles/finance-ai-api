@@ -15,6 +15,8 @@ namespace RegistrAi.Api.Controllers
         private readonly string _apiKey;
         private readonly HttpClient _httpClient;
         private static readonly System.Globalization.CultureInfo _culturaBr = new System.Globalization.CultureInfo("pt-BR");
+        private static readonly TimeZoneInfo _fusoBrasil = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        private DateTime AgoraNoBrasil() => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _fusoBrasil);
 
         public TransacoesIaController(AppDbContext context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
         {
@@ -68,7 +70,7 @@ namespace RegistrAi.Api.Controllers
 
        private string MontarPrompt(string textoUsuario, List<MensagemHistorico> historico, string categoriasExistentes)
         {
-            string dataAtual = DateTime.Now.ToString("yyyy-MM-dd");
+            string dataAtual = AgoraNoBrasil().ToString("yyyy-MM-dd");
 
             // Monta o histórico da conversa em texto
             // para a IA entender o contexto do que já foi dito
@@ -406,7 +408,7 @@ namespace RegistrAi.Api.Controllers
                     var dataFimStr = filtrosElement.TryGetProperty("dataFim", out var df) && df.ValueKind == JsonValueKind.String ? df.GetString() : null;
 
                     // Calcula as datas baseado no período
-                    var hoje = DateTime.Today;
+                    var hoje = AgoraNoBrasil().Date;
                     DateTime dataInicio;
                     DateTime dataFim = hoje;
 
