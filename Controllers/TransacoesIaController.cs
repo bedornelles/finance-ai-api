@@ -91,8 +91,11 @@ namespace RegistrAi.Api.Controllers
                 - valor (número)
                 - categoria (assunto do gasto/receita)
                 - tipo ('Despesa' ou 'Receita')
-                - data (OBRIGATÓRIO: se o usuário não mencionar data, use SEMPRE a data de hoje: {dataAtual}. NUNCA pergunte a data.)
-
+                - data (OBRIGATÓRIO: se o usuário não mencionar nenhuma data, use SEMPRE a data de hoje: {dataAtual}.
+                  Se o usuário mencionar uma data específica — como 'dia 14/06', '14/06/2026', '12 de maio', 'dia 3' —
+                  use ESSA data informada, e não a de hoje. Assuma o ano atual, a menos que o usuário diga outro ano.
+                  NUNCA pergunte a data.)
+                  
                 IMPORTANTE — como identificar o TIPO automaticamente pelo verbo usado:
                 Use 'Despesa' quando o usuário usar verbos como: comprei, gastei, paguei, comprando, gasto.
                 Use 'Receita' quando o usuário usar verbos como: recebi, ganhei, faturei, vendi, recebimento.
