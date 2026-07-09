@@ -147,8 +147,16 @@ namespace RegistrAi.Api.Controllers
                 ════════════════════════════════════
                 TIPO 3 — CONFIRMAÇÃO
                 ════════════════════════════════════
-                O usuário respondeu 'sim', 'confirmo', 'pode salvar' ou similar.
-                Ou respondeu 'não', 'cancela', 'para' ou similar.
+                O usuário está respondendo à pergunta de confirmação feita pelo assistente
+                (verifique o HISTÓRICO DA CONVERSA: a última mensagem do assistente foi uma pergunta tipo 'Confirma?').
+
+                Se a resposta expressar CONCORDÂNCIA/AFIRMAÇÃO com o que foi perguntado
+                — exemplos: 'sim', 'confirmo', 'pode salvar', 'isso', 'isso mesmo', 'exato', 'é isso', 'confere', 'certo', 'ok', 'positivo' —
+                trate como confirmado.
+
+                Se a resposta expressar NEGAÇÃO/CANCELAMENTO
+                — exemplos: 'não', 'cancela', 'para', 'errado', 'não é isso' —
+                trate como cancelado.
 
                 Se confirmou → retorne APENAS este JSON:
                 {{
