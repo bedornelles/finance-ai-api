@@ -95,7 +95,7 @@ namespace RegistrAi.Api.Controllers
                   Se o usuário mencionar uma data específica — como 'dia 14/06', '14/06/2026', '12 de maio', 'dia 3' —
                   use ESSA data informada, e não a de hoje. Assuma o ano atual, a menos que o usuário diga outro ano.
                   NUNCA pergunte a data.)
-                  
+
                 IMPORTANTE — como identificar o TIPO automaticamente pelo verbo usado:
                 Use 'Despesa' quando o usuário usar verbos como: comprei, gastei, paguei, comprando, gasto.
                 Use 'Receita' quando o usuário usar verbos como: recebi, ganhei, faturei, vendi, recebimento.
@@ -137,11 +137,15 @@ namespace RegistrAi.Api.Controllers
                 {{
                     ""classificacao"": ""pergunta"",
                     ""filtros"": {{
-                        ""periodo"": (""hoje"", ""semana"", ""mes"", ""ano"" ou null),
+                        ""periodo"": (""hoje"", ""semana"", ""mes"", ""mes_passado"", ""ano"" ou null),
                         ""categoria"": (categoria mencionada ou null),
                         ""tipo"": (""Despesa"", ""Receita"" ou null),
-                        ""dataInicio"": (data específica ou null),
-                        ""dataFim"": (data específica ou null)
+                        ""dataInicio"": (formato ISO YYYY-MM-DD. Preencha SEMPRE que o usuário mencionar um mês
+                          específico por nome, como 'junho', 'em maio', 'no mês de março' — use o primeiro dia
+                          desse mês. Assuma o ano atual, a menos que o usuário diga outro ano. Null se o usuário
+                          não mencionou nenhum mês/data específica.),
+                        ""dataFim"": (formato ISO YYYY-MM-DD. Preencha junto com dataInicio, usando o último dia
+                          do mês mencionado. Null se não houver menção de data específica.)
                     }},
                     ""mensagem"": null,
                     ""transacao"": null
@@ -398,6 +402,8 @@ namespace RegistrAi.Api.Controllers
                     var periodo = filtrosElement.TryGetProperty("periodo", out var p) ? p.GetString() : null;
                     var categoria = filtrosElement.TryGetProperty("categoria", out var c) ? c.GetString() : null;
                     var tipo = filtrosElement.TryGetProperty("tipo", out var tp) ? tp.GetString() : null;
+                    var dataInicioStr = filtrosElement.TryGetProperty("dataInicio", out var di) && di.ValueKind == JsonValueKind.String ? di.GetString() : null;
+                    var dataFimStr = filtrosElement.TryGetProperty("dataFim", out var df) && df.ValueKind == JsonValueKind.String ? df.GetString() : null;
 
                     // Calcula as datas baseado no período
                     var hoje = DateTime.Today;
@@ -413,6 +419,11 @@ namespace RegistrAi.Api.Controllers
                             var diasDesdeSegunda = ((int)hoje.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
                             dataInicio = hoje.AddDays(-diasDesdeSegunda);
                             break;
+                        case "mes_passado":
+                            var mesPassado = hoje.AddMonths(-1);
+                            dataInicio = new DateTime(mesPassado.Year, mesPassado.Month, 1);
+                            dataFim = dataInicio.AddMonths(1).AddDays(-1);
+                            break;
                         case "ano":
                             dataInicio = new DateTime(hoje.Year, 1, 1);
                             break;
@@ -420,6 +431,13 @@ namespace RegistrAi.Api.Controllers
                             dataInicio = new DateTime(hoje.Year, hoje.Month, 1);
                             break;
                     }
+
+                    // Se a IA identificou um mês/data específica (ex: "junho"), isso tem prioridade sobre o cálculo acima
+                    if (DateTime.TryParse(dataInicioStr, out var dataInicioEspecifica))
+                        dataInicio = dataInicioEspecifica.Date;
+
+                    if (DateTime.TryParse(dataFimStr, out var dataFimEspecifica))
+                        dataFim = dataFimEspecifica.Date;
 
                     // Consulta o banco com os filtros
                     var query = _context.Transacoes.Where(t => t.DispositivoId == DispositivoIdAtual);
